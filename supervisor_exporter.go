@@ -27,11 +27,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
-	"github.com/prometheus/node_exporter/collector"
+	"github.com/prometheus/supervisor_exporter/collector"
 )
 
 const (
-	defaultCollectors = "conntrack,cpu,diskstats,entropy,filefd,filesystem,hwmon,loadavg,mdadm,meminfo,netdev,netstat,sockstat,stat,textfile,time,uname,vmstat"
+	defaultCollectors = "" // logind,runit,supervisord,systemd"
 )
 
 var (
@@ -40,24 +40,24 @@ var (
 			Namespace: collector.Namespace,
 			Subsystem: "exporter",
 			Name:      "scrape_duration_seconds",
-			Help:      "node_exporter: Duration of a scrape job.",
+			Help:      "supervisor_exporter: Duration of a scrape job.",
 		},
 		[]string{"collector", "result"},
 	)
 )
 
-// NodeCollector implements the prometheus.Collector interface.
-type NodeCollector struct {
+// SupervisorCollector implements the prometheus.Collector interface.
+type SupervisorCollector struct {
 	collectors map[string]collector.Collector
 }
 
 // Describe implements the prometheus.Collector interface.
-func (n NodeCollector) Describe(ch chan<- *prometheus.Desc) {
+func (n SupervisorCollector) Describe(ch chan<- *prometheus.Desc) {
 	scrapeDurations.Describe(ch)
 }
 
 // Collect implements the prometheus.Collector interface.
-func (n NodeCollector) Collect(ch chan<- prometheus.Metric) {
+func (n SupervisorCollector) Collect(ch chan<- prometheus.Metric) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(n.collectors))
 	for name, c := range n.collectors {
@@ -114,13 +114,13 @@ func loadCollectors(list string) (map[string]collector.Collector, error) {
 }
 
 func init() {
-	prometheus.MustRegister(version.NewCollector("node_exporter"))
+	prometheus.MustRegister(version.NewCollector("supervisor_exporter"))
 }
 
 func main() {
 	var (
 		showVersion       = flag.Bool("version", false, "Print version information.")
-		listenAddress     = flag.String("web.listen-address", ":9100", "Address on which to expose metrics and web interface.")
+		listenAddress     = flag.String("web.listen-address", ":9228", "Address on which to expose metrics and web interface.")
 		metricsPath       = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
 		enabledCollectors = flag.String("collectors.enabled", filterAvailableCollectors(defaultCollectors), "Comma-separated list of collectors to use.")
 		printCollectors   = flag.Bool("collectors.print", false, "If true, print available collectors and exit.")
@@ -128,20 +128,20 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Fprintln(os.Stdout, version.Print("node_exporter"))
+		fmt.Fprintln(os.Stdout, version.Print("supervisor_exporter"))
 		os.Exit(0)
 	}
 
-	log.Infoln("Starting node_exporter", version.Info())
+	log.Infoln("Starting supervisor_exporter", version.Info())
 	log.Infoln("Build context", version.BuildContext())
 
-	if *printCollectors {
+	if *enabledCollectors == "" || *printCollectors {
 		collectorNames := make(sort.StringSlice, 0, len(collector.Factories))
 		for n := range collector.Factories {
 			collectorNames = append(collectorNames, n)
 		}
 		collectorNames.Sort()
-		fmt.Printf("Available collectors:\n")
+		fmt.Printf("-collectors.enabled required! Available collectors:\n")
 		for _, n := range collectorNames {
 			fmt.Printf(" - %s\n", n)
 		}
@@ -157,8 +157,8 @@ func main() {
 		log.Infof(" - %s", n)
 	}
 
-	nodeCollector := NodeCollector{collectors: collectors}
-	prometheus.MustRegister(nodeCollector)
+	supervisorCollector := SupervisorCollector{collectors: collectors}
+	prometheus.MustRegister(supervisorCollector)
 
 	handler := prometheus.Handler()
 

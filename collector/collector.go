@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-const Namespace = "node"
+const Namespace = "supervisor"
 
 var Factories = make(map[string]func() (Collector, error))
 
