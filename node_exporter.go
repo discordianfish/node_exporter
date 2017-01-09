@@ -98,9 +98,13 @@ func execute(name string, c collector.Collector, ch chan<- prometheus.Metric) {
 	scrapeDurations.WithLabelValues(name, result).Observe(duration.Seconds())
 }
 
-func loadCollectors(list string) (map[string]collector.Collector, error) {
+func loadCollectors(enabledFlags map[string]*bool) (map[string]collector.Collector, error) {
 	collectors := map[string]collector.Collector{}
-	for _, name := range strings.Split(list, ",") {
+	for name, enabled := range enabledFlags {
+		if !*enabled {
+			continue
+		}
+
 		fn, ok := collector.Factories[name]
 		if !ok {
 			return nil, fmt.Errorf("collector '%s' not available", name)
@@ -125,7 +129,17 @@ func main() {
 		metricsPath       = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
 		enabledCollectors = flag.String("collectors.enabled", filterAvailableCollectors(defaultCollectors), "Comma-separated list of collectors to use.")
 		printCollectors   = flag.Bool("collectors.print", false, "If true, print available collectors and exit.")
+
+		enabledFlags        = make(map[string]*bool)
+		enabledFlagsDefault = make(map[string]bool)
 	)
+
+	for _, name := range strings.Split(*enabledCollectors, ",") {
+		enabledFlagsDefault[name] = true
+	}
+	for name, _ := range collector.Factories {
+		enabledFlags[name] = flag.Bool("collector."+name+".enabled", enabledFlagsDefault[name], "Enable "+name+" collector")
+	}
 	flag.Parse()
 
 	if *showVersion {
@@ -148,7 +162,8 @@ func main() {
 		}
 		return
 	}
-	collectors, err := loadCollectors(*enabledCollectors)
+
+	collectors, err := loadCollectors(enabledFlags)
 	if err != nil {
 		log.Fatalf("Couldn't load collectors: %s", err)
 	}
